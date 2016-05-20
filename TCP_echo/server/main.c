@@ -2,6 +2,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include <errno.h>
 
 #define IPADDRESS "127.0.0.1"
+#define PORT 50123
 
 void str_echo(int connfd);
 
@@ -20,7 +22,7 @@ int main(int argc,char** argv){
 
 	bzero(&servaddr,sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_port = 9877;
+	servaddr.sin_port = htons(PORT);
 	if(!inet_pton(AF_INET, IPADDRESS, &servaddr.sin_addr)){
 		perror("ip format error.");
 		exit(1);
@@ -35,6 +37,7 @@ int main(int argc,char** argv){
 	int clilen = sizeof(cliaddr);
 	while(1){
 		connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &clilen);
+		printf("connect sucess!server port is %d\n",ntohs(servaddr.sin_port));
 		childpid = fork();
 		if(childpid == 0){	//child process
 			close(listenfd);
@@ -50,7 +53,7 @@ void str_echo(int connfd){
 	char buf[1024];
 	size_t n;
 	while((n = read(connfd, buf, sizeof(buf))) > 0){
-		printf("from client:%.*s\n",(int)n,buf);
+		printf("from client: %.*s\n",(int)n,buf);
 		write(connfd, buf, n);
 	}
 }

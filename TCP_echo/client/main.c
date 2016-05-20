@@ -5,10 +5,12 @@
 
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
 
 #define MAXLINE 1024
+#define PORT 50123
 
 void str_cli(FILE* fp, int sockfd);
 int readline(int sockfd, void* ptr, int maxline);
@@ -25,13 +27,13 @@ int main(int argc, char** argv){
 
 	bzero(&servaddr, sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
-	servaddr.sin_port = 9877;
+	servaddr.sin_port = htons(PORT);
 	inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
 
 	if(connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1){
 		perror("connect failed!");
 	}
-
+	printf("connect sucess!server port is %d\n",ntohs(servaddr.sin_port));
 	str_cli(stdin,sockfd);
 	return 0;
 }
