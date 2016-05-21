@@ -3,11 +3,14 @@
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <signal.h>
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <errno.h>
+
+#include "../lib/utility.h"
 
 #define IPADDRESS "127.0.0.1"
 #define PORT 50123
@@ -34,9 +37,19 @@ int main(int argc,char** argv){
 
 	listen(listenfd,10);
 
-	int clilen = sizeof(cliaddr);
+	Signal(SIGCHLD, sig_chld);
+
 	while(1){
+		int clilen = sizeof(cliaddr);
 		connfd = accept(listenfd, (struct sockaddr*)&cliaddr, &clilen);
+		if(connfd < 0){
+			if(errno == EINTR)
+				continue;
+			else{
+				printf("accept error\n");
+				exit (1);
+			}
+		}
 		printf("connect sucess!server port is %d\n",ntohs(servaddr.sin_port));
 		childpid = fork();
 		if(childpid == 0){	//child process

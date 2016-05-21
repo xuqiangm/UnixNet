@@ -16,25 +16,28 @@ void str_cli(FILE* fp, int sockfd);
 int readline(int sockfd, void* ptr, int maxline);
 
 int main(int argc, char** argv){
-	int sockfd;
+	int sockfd[5],i;
 	struct sockaddr_in servaddr;
 
 	if(argc != 2){
-		perror("usage:tcpcli <IPaddress>");
+		perror("usage:client <IPaddress>");
 		exit(1);
 	}
-	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
-	bzero(&servaddr, sizeof(servaddr));
-	servaddr.sin_family = AF_INET;
-	servaddr.sin_port = htons(PORT);
-	inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+	for(i=0; i<5; i++){
+		sockfd[i] = socket(AF_INET, SOCK_STREAM, 0);
 
-	if(connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1){
-		perror("connect failed!");
+		bzero(&servaddr, sizeof(servaddr));
+		servaddr.sin_family = AF_INET;
+		servaddr.sin_port = htons(PORT);
+		inet_pton(AF_INET, argv[1], &servaddr.sin_addr);
+
+		if(connect(sockfd[i], (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1){
+			perror("connect failed!");
+		}
+		printf("connect sucess!server port is %d\n",ntohs(servaddr.sin_port));
 	}
-	printf("connect sucess!server port is %d\n",ntohs(servaddr.sin_port));
-	str_cli(stdin,sockfd);
+	str_cli(stdin,sockfd[0]);
 	return 0;
 }
 
