@@ -2,10 +2,12 @@
 #include <sys/types.h>
 #include <sys/select.h>
 #include <sys/time.h>
+#include <sys/stropts.h>
 #include <unistd.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <signal.h>
+#include <poll.h>
 
 #include <string.h>
 #include <stdio.h>
@@ -17,91 +19,98 @@
 #define IPADDRESS "127.0.0.1"
 #define PORT 50123
 #define MAXLINE 1024
+#define MAXQUE 10
+#define OPEN_MAX 100
 
 void str_echo(int connfd);
 
 int main(int argc,char** argv){
-	int listenfd,connfd,sockfd;
-	int client[MAXLINE];
-	int maxi, maxfd;
+	int i,maxi,listenfd,connfd,sockfd;
 	int nready;
-	int i;
+	int res, leftn;
 	ssize_t n;
-	int len;
 	char buf[MAXLINE];
-	fd_set rset,allset;
+	struct pollfd  clients[OPEN_MAX];
+	struct sockaddr_in servaddr;
 
-	for(i=0;i<MAXLINE;i++)
-		client[i] = -1;
-
-	struct sockaddr_in cliaddr,servaddr;
-	listenfd = socket(AF_INET,SOCK_STREAM,0);
+	listenfd = socket(AF_INET, SOCK_STREAM, 0);
 
 	bzero(&servaddr,sizeof(servaddr));
 	servaddr.sin_family = AF_INET;
+	if((res = inet_pton(AF_INET, IPADDRESS, &servaddr.sin_addr)) == 0){
+		perror("IP address error");
+		exit(1);
+	}
 	servaddr.sin_port = htons(PORT);
-	if(!inet_pton(AF_INET, IPADDRESS, &servaddr.sin_addr)){
-		perror("ip format error.");
-		exit(1);
-	}
-	if(bind(listenfd,(struct sockaddr*)&servaddr,sizeof(servaddr)) == -1){
-		perror("bind error");
+
+	if((res=bind(listenfd, (struct sockaddr*)&servaddr, sizeof(servaddr)))!=0){
+		perror("bind() failed.");
 		exit(1);
 	}
 
-	listen(listenfd,10);
+	listen(listenfd, MAXQUE);
 
-	FD_ZERO(&allset);
-	FD_SET(listenfd, &allset);
-	maxi = -1;
-	maxfd = listenfd;
+	clients[0].fd = listenfd;
+	clients[0].events = POLLRDNORM;
+	for(i=1; i<OPEN_MAX; i++)
+		clients[i].fd = -1;
+	maxi = 0;
 
 	for(;;){
-		rset = allset;
-		nready = select(maxfd+1, &rset, NULL, NULL, NULL);
-
-		if(FD_ISSET(listenfd, &rset)){	//监听套接字可读
+		nready = poll(clients, maxi+1, -1);
+		if(clients[0].revents & POLLRDNORM){	//有新的客户端链接
 			connfd = accept(listenfd, NULL, NULL);
-			printf("get a client\n");
-			for(i=0; i<FD_SETSIZE; i++){	//找到一个client位置插入该文件描述符
-				if(client[i] < 0){
-					client[i] = connfd;
+			for(i=1; i<OPEN_MAX; i++){
+				if(clients[i].fd == -1){
+					clients[i].fd = connfd;
 					break;
 				}
 			}
-			if(i == FD_SETSIZE){
-				printf("too many clients.");
+			if(i == OPEN_MAX){
+				perror("too many clients");
+				exit(1);
 			}
-			FD_SET(connfd,&allset);
-			if(connfd > maxfd)
-				maxfd = connfd;
+			printf("a new client\n");
+			clients[i].events=POLLRDNORM;
 			if(i > maxi)
 				maxi = i;
 			if(--nready <= 0)
 				continue;
 		}
-
-		for(i=0; i<=maxi; i++){
-			if((sockfd=client[i]) < 0)
+		for(i = 1; i<=maxi; i++){	//查看所有的已链接的客户
+			if((sockfd = clients[i].fd)<0)
 				continue;
-			if(FD_ISSET(sockfd, &rset)){	//注意此处不能使用 allset，因为如果allset有以为可能是因为监听字可读后设置的
-											//而不是因为select函数设置的
-				if((n=read(sockfd, buf,MAXLINE)) == 0){	//连接被用户关闭
-					close(sockfd);
-					FD_CLR(sockfd, &allset);	//修改时使用 allset
-					client[i]=-1;
-				}
-				else{
-					while(n > 0){
-						len = write(sockfd,buf,n);
-						n -= len;
+			if(clients[i].events & (POLLRDNORM | POLLERR)){
+				if((n=read(sockfd,buf,MAXLINE)) < 0){
+					if(errno == ECONNRESET){
+						//客户发送reset
+						close(sockfd);
+						clients[i].fd = -1;
+					}
+					else{
+						perror("read error.");
+						exit(1);
 					}
 				}
+				else if(n == 0){
+					//连接被客户关闭
+					printf("client close.\n");
+					close(sockfd);
+					clients[i].fd = -1;
+				}
+				else{
+					write(fileno(stdout), buf, n);
+					leftn = n;
+					while(leftn > 0){
+						leftn -= write(sockfd, buf, leftn);
+					}
+				}
+				if(--nready <= 0)
+					break;
 			}
-			if(--nready <= 0)
-				break;
 		}
 	}
+
 	return 0;
 }
 

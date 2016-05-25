@@ -40,6 +40,7 @@ int main(int argc, char** argv){
 
 	if(connect(sockfd, (struct sockaddr*)&servaddr, sizeof(servaddr)) == -1){
 		perror("connect failed!");
+		exit(1);
 	}
 	printf("connect sucess!server port is %d\n",ntohs(servaddr.sin_port));
 	str_cli(stdin,sockfd);
@@ -75,7 +76,6 @@ void str_cli(FILE* fp, int sockfd){
 
 		if(FD_ISSET(fileno(fp),&rset)){	//输入可读
 			if((n = read(fileno(fp), buf, MAXLINE)) == 0){
-				printf("怎么会是0");
 				stdineof = 1;
 				shutdown(sockfd, SHUT_WR);
 				FD_CLR(fileno(fp),&rset);
